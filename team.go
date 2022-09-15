@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,15 @@ var teams = []Team{
 	{ID: "T2", Name: "Syndication", Members: []string{"Tiago Ramalho", "David Loughridge", "James Nelson"}, Epics: []string{}},
 }
 
+const (
+	XS_WEIGHT  int = 1
+	S_WEIGHT       = 2
+	M_WEIGHT       = 4
+	L_WEIGHT       = 8
+	XL_WEIGHT      = 16
+	XXL_WEIGHT     = 32
+)
+
 func teamIDExists(id string) bool {
 	for _, team := range teams {
 		if team.ID == id {
@@ -34,6 +44,11 @@ func getTeam(id string) (int, Team) {
 		}
 	}
 	return -1, Team{}
+}
+
+func removeTeamFromSlice(s []Team, i int) []Team {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
 }
 
 func createStubTeam(id string) {
@@ -85,4 +100,38 @@ func postTeams(c *gin.Context) {
 	// Add the new team to the slice
 	teams = append(teams, newTeam)
 	c.IndentedJSON(http.StatusCreated, newTeam)
+}
+
+func updateTeam(c *gin.Context) {
+	var updatedTeam Team
+	id := c.Param("id")
+
+	// Get team if exists
+	if i, _ := getTeam(id); i == -1 {
+		// negative index returned therefore doesn't exist
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Team not found"})
+		return
+	} else {
+		if err := c.BindJSON(&updatedTeam); err != nil {
+			c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Invalid JSON"})
+			return
+		}
+		// TODO: check if Epics is updated and reflect the change in epics
+		teams[i] = updatedTeam
+	}
+}
+
+func deleteTeam(c *gin.Context) {
+	id := c.Param("id")
+
+	// Get team if exists
+	if i, _ := getTeam(id); i == -1 {
+		// negative index returned therefore doesn't exist
+		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Team %s does not exist so does not require deletion", id)})
+		return
+	} else {
+		// TODO: Remove all Epics related to this team?
+		teams = removeTeamFromSlice(teams, i)
+		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Team %s deleted successfully", id)})
+	}
 }

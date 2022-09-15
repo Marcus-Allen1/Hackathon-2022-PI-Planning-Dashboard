@@ -36,6 +36,20 @@ func epicIDExists(id string) bool {
 	return false
 }
 
+func getEpic(id string) (int, Epic) {
+	for i, epic := range epics {
+		if epic.ID == id {
+			return i, epic
+		}
+	}
+	return -1, Epic{}
+}
+
+func removeEpicFromSlice(s []Epic, i int) []Epic {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
+}
+
 func getEpicsByTeam(c *gin.Context, team string) {
 	var foundEpics []Epic
 
@@ -64,13 +78,13 @@ func getEpicByID(c *gin.Context) {
 	id := c.Param("id")
 
 	// Loop over all Epics to find the value matching id
-	for _, epic := range epics {
-		if epic.ID == id {
-			c.IndentedJSON(http.StatusOK, epic)
-			return
-		}
+	if i, epic := getEpic(id); i == -1 {
+		// negative index returned therefore doesn't exist
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Epic not found"})
+		return
+	} else {
+		c.IndentedJSON(http.StatusOK, epic)
 	}
-	c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Epic not found"})
 }
 
 func postEpics(c *gin.Context) {
@@ -93,4 +107,38 @@ func postEpics(c *gin.Context) {
 	epics = append(epics, newEpic)
 
 	c.IndentedJSON(http.StatusCreated, newEpic)
+}
+
+func updateEpic(c *gin.Context) {
+	var updatedEpic Epic
+	id := c.Param("id")
+
+	// Get epic if exists
+	if i, _ := getEpic(id); i == -1 {
+		// negative index returned therefore doesn't exist
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Epic not found"})
+		return
+	} else {
+		if err := c.BindJSON(&updatedEpic); err != nil {
+			c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Invalid JSON"})
+			return
+		}
+		//TODO: check if team is updated and reflect the change in teams
+		epics[i] = updatedEpic
+	}
+}
+
+func deleteEpic(c *gin.Context) {
+	id := c.Param("id")
+
+	// Get epic if exists
+	if i, _ := getEpic(id); i == -1 {
+		// negative index returned therefore doesn't exist
+		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Epic %s does not exist so does not require deletion", id)})
+		return
+	} else {
+		// TODO: Remove epic from teams
+		epics = removeEpicFromSlice(epics, i)
+		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Epic %s deleted successfully", id)})
+	}
 }
