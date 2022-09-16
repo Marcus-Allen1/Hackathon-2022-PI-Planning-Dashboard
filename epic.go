@@ -50,6 +50,51 @@ func removeEpicFromSlice(s []Epic, i int) []Epic {
 	return s[:len(s)-1]
 }
 
+func differenceInSlices(slice1, slice2 []string) []string {
+	var diff []string
+
+	for _, s1 := range slice1 {
+		found := false
+		for _, s2 := range slice2 {
+			if s1 == s2 {
+				found = true
+				break
+			}
+		}
+		// string not found, we add it to return slice
+		if !found {
+			diff = append(diff, s1)
+		}
+	}
+
+	return diff
+}
+
+func removeTeamFromEpics(removeFromList []string) {
+	for _, epicID := range removeFromList {
+		i, epic := getEpic(epicID)
+		epic.Team = ""
+		epics[i] = epic
+	}
+}
+
+func updateTeamInEpics(oldEpics []string, newEpics []string, teamID string) {
+	removed := differenceInSlices(oldEpics, newEpics)
+	added := differenceInSlices(newEpics, oldEpics)
+
+	for _, epicID := range removed {
+		i, epic := getEpic(epicID)
+		epic.Team = ""
+		epics[i] = epic
+	}
+
+	for _, epicID := range added {
+		i, epic := getEpic(epicID)
+		epic.Team = teamID
+		epics[i] = epic
+	}
+}
+
 func getEpicsByTeam(c *gin.Context, team string) {
 	var foundEpics []Epic
 
@@ -123,8 +168,17 @@ func updateEpic(c *gin.Context) {
 			c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Invalid JSON"})
 			return
 		}
-		//TODO: check if team is updated and reflect the change in teams
+
+		if epics[i].Team != updatedEpic.Team {
+			err := updateEpicInTeams(epics[i].Team, updatedEpic.Team, id)
+			if err != nil {
+				c.IndentedJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+				return
+			}
+		}
+
 		epics[i] = updatedEpic
+		c.IndentedJSON(http.StatusOK, updatedEpic)
 	}
 }
 
@@ -132,12 +186,15 @@ func deleteEpic(c *gin.Context) {
 	id := c.Param("id")
 
 	// Get epic if exists
-	if i, _ := getEpic(id); i == -1 {
+	if i, epic := getEpic(id); i == -1 {
 		// negative index returned therefore doesn't exist
 		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Epic %s does not exist so does not require deletion", id)})
 		return
 	} else {
-		// TODO: Remove epic from teams
+		if err := removeEpicFromTeam(epic.Team, epic.ID); err != nil {
+			c.IndentedJSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			return
+		}
 		epics = removeEpicFromSlice(epics, i)
 		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Epic %s deleted successfully", id)})
 	}

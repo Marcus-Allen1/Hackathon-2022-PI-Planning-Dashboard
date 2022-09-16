@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,6 +51,58 @@ func getTeam(id string) (int, Team) {
 func removeTeamFromSlice(s []Team, i int) []Team {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
+}
+
+func removeStringFromSlice(s []string, i int) []string {
+	s[i] = s[len(s)-1]
+	return s[:len(s)-1]
+}
+
+func findInSlice(s []string, id string) int {
+	for i, item := range s {
+		if item == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func removeEpicFromTeam(teamID string, epicID string) error {
+	i, team := getTeam(teamID)
+
+	positionInSlice := findInSlice(team.Epics, epicID)
+
+	if i == -1 {
+		return errors.New("Epic Does not Exist for Team")
+	}
+
+	team.Epics = removeStringFromSlice(team.Epics, positionInSlice)
+	teams[i] = team
+
+	return nil
+}
+
+func updateEpicInTeams(oldTeam string, newTeam string, epicID string) error {
+	i, oldTeamObject := getTeam(oldTeam)
+	j, newTeamObject := getTeam(newTeam)
+	if i == -1 || j == -1 {
+		return errors.New("Team Does Not Exist")
+	}
+
+	positionInSlice := findInSlice(oldTeamObject.Epics, epicID)
+
+	if positionInSlice == -1 {
+		return errors.New("Epic not assigned to Team")
+	}
+
+	oldTeamObject.Epics = removeStringFromSlice(oldTeamObject.Epics, positionInSlice)
+
+	newTeamObject.Epics = append(newTeamObject.Epics, epicID)
+
+	teams[i] = oldTeamObject
+	teams[j] = newTeamObject
+
+	return nil
 }
 
 func createStubTeam(id string) {
@@ -116,8 +170,13 @@ func updateTeam(c *gin.Context) {
 			c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Invalid JSON"})
 			return
 		}
-		// TODO: check if Epics is updated and reflect the change in epics
+
+		if !reflect.DeepEqual(teams[i].Epics, updatedTeam.Epics) {
+			updateTeamInEpics(teams[i].Epics, updatedTeam.Epics, id)
+		}
+
 		teams[i] = updatedTeam
+		c.IndentedJSON(http.StatusOK, updatedTeam)
 	}
 }
 
@@ -125,12 +184,13 @@ func deleteTeam(c *gin.Context) {
 	id := c.Param("id")
 
 	// Get team if exists
-	if i, _ := getTeam(id); i == -1 {
+	if i, team := getTeam(id); i == -1 {
 		// negative index returned therefore doesn't exist
 		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Team %s does not exist so does not require deletion", id)})
 		return
 	} else {
 		// TODO: Remove all Epics related to this team?
+		removeTeamFromEpics(team.Epics)
 		teams = removeTeamFromSlice(teams, i)
 		c.IndentedJSON(http.StatusOK, gin.H{"message": fmt.Sprintf("Team %s deleted successfully", id)})
 	}
